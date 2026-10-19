@@ -21,7 +21,7 @@ SCREEN_WIDTH  = MAZE_COLS * TILE_SIZE
 SCREEN_HEIGHT = MAZE_ROWS * TILE_SIZE + HUD_HEIGHT
 FPS = 60
 
-VADER_SPEED        = 14
+VADER_SPEED        = 14     # базовое значение (кадров между шагами)
 EXTRA_PASSAGES     = 12
 RESTARTS_PER_THEME = 3
 
@@ -100,7 +100,9 @@ class Game:
 
         self.tick = 0
         self.restart_count = 0
+        self.win_count = 0                     # 🆕 сколько раз победил
         self.theme_index = 0
+        self.current_vader_speed = VADER_SPEED # 🆕 текущая скорость Вейдера
         self._apply_theme(0)
         self.reset()
 
@@ -110,6 +112,52 @@ class Game:
         self.wall_surface  = make_wall_surface(theme)
         self.floor_surface = make_floor_surface(theme)
 
+    # ---------- Сложность ----------
+    def _difficulty(self):
+        """Возвращает (vader_speed, num_rebels) с учётом числа побед."""
+        w = self.win_count
+
+        # Вейдер: каждую победу на 2% быстрее (VADER_SPEED уменьшается)
+        # 0 побед → 14, 1 → ~13.7, 10 → ~11.4, 50 → ~5.2 ...
+        speed = max(4, int(VADER_SPEED * (0.98 ** w)))
+
+        # Повстанцы: +1 за победу, но не больше лимита
+        num = 6 + w
+        # Лимит по площади карты (примерно 1 повстанец на 8 свободных клеток)
+        free_cells = sum(1 for row in self.maze for c in row if c == 0)
+        num = min(num, max(4, free_cells // 8))
+        return speed, num
+
+    def _spawn_rebels(self, free, count):
+        """Разбрасывает повстанцев подальше друг от друга и от игрока."""
+        rebels = []
+        pool = [(x, y) for (x, y) in free
+                if (x, y) != (self.player.x, self.player.y)]
+        random.shuffle(pool)
+
+        px, py = self.player.x, self.player.y
+
+        for _ in range(count):
+            if not pool:
+                break
+
+            def score(pos):
+                x, y = pos
+                d_player = abs(x - px) + abs(y - py)
+                if rebels:
+                    d_rebels = min(abs(x - rx) + abs(y - ry)
+                                   for (rx, ry) in rebels)
+                else:
+                    d_rebels = 999
+                return d_player * 1.0 + d_rebels * 1.5 + random.random() * 3
+
+            best = max(pool, key=score)
+            pool.remove(best)
+            rebels.append(best)
+
+        return [Rebel(x, y) for (x, y) in rebels]
+
+    # ---------- Рестарт ----------
     def reset(self):
         new_idx = (self.restart_count // RESTARTS_PER_THEME) % len(THEMES)
         if new_idx != self.theme_index:
@@ -130,14 +178,21 @@ class Game:
         ex, ey = free.pop(0)
         self.exit = Exit(ex, ey)
 
-        self.rebels, self.friends = [], []
-        for _ in range(min(6, len(free))):
-            x, y = free.pop()
-            self.rebels.append(Rebel(x, y))
+        # 🔥 Сложность зависит от числа побед
+        self.current_vader_speed, num_rebels = self._difficulty()
+
+        # Повстанцы — разбросанно
+        self.rebels = self._spawn_rebels(free, num_rebels)
+        rebel_positions = {(r.x, r.y) for r in self.rebels}
+        free = [p for p in free if p not in rebel_positions]
+
+        # Друзья
+        self.friends = []
         for _ in range(min(4, len(free))):
             x, y = free.pop()
             self.friends.append(Friend(x, y))
 
+        # Вейдер — подальше от игрока
         self.vader = None
         if free:
             free.sort(key=lambda p: -(abs(p[0] - px) + abs(p[1] - py)))
@@ -232,18 +287,23 @@ class Game:
                 self.message = "Дарт Вейдер победил тебя..."
                 self.sounds.play_fall()
 
-        # Движение Вейдера
+        # Движение Вейдера — используем текущую скорость
         if self.vader:
             self.vader.move_counter += 1
-            if self.vader.move_counter >= VADER_SPEED:
+            if self.vader.move_counter >= self.current_vader_speed:
                 self.vader.move_counter = 0
                 self._move_vader()
 
         # Выход
         if (self.exit.x, self.exit.y) == (self.player.x, self.player.y):
             self.state = "win"
+            self.win_count += 1                     # 🆕 +1 победа
             self.message = f"ПОБЕДА! Счёт: {self.player.score}"
             self.sounds.play_win()
+            print(f"🏆 Побед: {self.win_count} → "
+                  f"следующая игра: скорость Вейдера "
+                  f"~{VADER_SPEED * (0.98 ** self.win_count):.1f}, "
+                  f"повстанцев +1")
 
     def _move_vader(self):
         start = (self.vader.x, self.vader.y)
@@ -325,6 +385,8 @@ class Game:
                    (15, y0 + 38), small=True)
         self._text(f"Рестартов: {self.restart_count}", (200, 200, 220),
                    (200, y0 + 38), small=True)
+        self._text(f"Побед: {self.win_count}", (255, 180, 90),
+                   (350, y0 + 38), small=True)
         self._text("Стрелки/WASD | R — рестарт | ESC — выход",
                    (150, 150, 170), (SCREEN_WIDTH - 380, y0 + 12), small=True)
 
@@ -372,7 +434,7 @@ class Game:
                     if event.key == pygame.K_ESCAPE:
                         running = False
                     elif event.key == pygame.K_r:
-                        self.sounds.stop_all()      # ← ✅ стоп win/fall/музыки
+                        self.sounds.stop_all()
                         self.restart_count += 1
                         self.reset()
                     elif self.state == "playing":
