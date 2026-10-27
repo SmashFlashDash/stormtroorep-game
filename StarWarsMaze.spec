@@ -1,7 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('sounds', 'sounds'), ('sounds_event', 'sounds_event')]
+datas = [('sounds', 'sounds'), ('sounds_event', 'sounds_event'),
+         ('assets', 'assets')]
 binaries = []
 hiddenimports = ['pygame', 'pygame.freetype']
 tmp_ret = collect_all('pygame')

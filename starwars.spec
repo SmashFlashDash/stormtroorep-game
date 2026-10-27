@@ -10,6 +10,7 @@ a = Analysis(
     datas=[
         ('sounds', 'sounds'),
         ('sounds_event', 'sounds_event'),
+        ('assets', 'assets'),
     ],
     hiddenimports=['pygame', 'pygame.freetype', 'assets_gen', 'audio'],
     hookspath=[],

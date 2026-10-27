@@ -2,6 +2,10 @@
 make_assets.py — генерация PNG-спрайтов для игры Star Wars Maze.
 Запусти один раз: python make_assets.py
 Создаст папку assets/ с файлами персонажей.
+
+ВНИМАНИЕ: assets/stormtrooper.png — художественный ассет, его игра
+загружает как спрайт игрока. Здесь он НЕ перезаписывается: процедурная
+версия сохраняется отдельно в stormtrooper_proc.png.
 """
 import pygame
 import os
@@ -20,8 +24,8 @@ def new_surface():
     return s
 
 
-# ==================== ШТУРМОВИК ====================
-def make_stormtrooper():
+# ==================== ШТУРМОВИК (процедурная версия) ====================
+def make_stormtrooper_proc():
     s = new_surface()
     # Шлем (белый овал)
     pygame.draw.ellipse(s, (240, 240, 240), (4, 3, 32, 34))
@@ -43,7 +47,7 @@ def make_stormtrooper():
     # "Рот" — вертикальные линии
     pygame.draw.line(s, (15, 15, 15), (18, 23), (18, 33), 1)
     pygame.draw.line(s, (15, 15, 15), (22, 23), (22, 33), 1)
-    pygame.image.save(s, os.path.join(OUT_DIR, "stormtrooper.png"))
+    pygame.image.save(s, os.path.join(OUT_DIR, "stormtrooper_proc.png"))
     return s
 
 
@@ -165,7 +169,7 @@ def make_floor():
 
 # ==================== ЗАПУСК ====================
 if __name__ == "__main__":
-    make_stormtrooper()
+    make_stormtrooper_proc()
     make_rebel()
     make_vader()
     make_friend()

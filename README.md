@@ -20,9 +20,12 @@
 - 🟢 **Выход** — зелёный портал. Дошёл — победа, счёт сохраняется, а следующий
   уровень станет сложнее: Вейдер быстрее, повстанцев больше.
 
-Вся графика (спрайты, стены, пол) рисуется кодом, а звуки шагов, подбора, бластера,
-взмаха меча и дыхания Вейдера синтезируются процедурно. Фоновая музыка и звуки
-победы/поражения подхватываются из папок `sounds/` и `sounds_event/`.
+Штурмовик-игрок берётся из готового PNG-ассета `assets/stormtrooper.png`
+(масштабируется под тайл и покачивается при ходьбе; если файла нет —
+спрайт рисуется кодом). Остальная графика (стены, пол, враги, выход)
+рисуется кодом, а звуки шагов, подбора, бластера, взмаха меча и дыхания
+Вейдера синтезируются процедурно. Фоновая музыка и звуки победы/поражения
+подхватываются из папок `sounds/` и `sounds_event/`.
 
 ### Карты (темы)
 
@@ -56,7 +59,7 @@ python starwars.py
 
 ```powershell
 pip install pyinstaller
-pyinstaller --noconfirm --onedir --windowed --name "StarWarsMaze" --icon "icon.ico" --add-data "sounds;sounds" --add-data "sounds_event;sounds_event" --hidden-import=pygame --hidden-import=pygame.freetype --collect-all pygame starwars.py
+pyinstaller --noconfirm --onedir --windowed --name "StarWarsMaze" --icon "icon.ico" --add-data "sounds;sounds" --add-data "sounds_event;sounds_event" --add-data "assets;assets" --hidden-import=pygame --hidden-import=pygame.freetype --collect-all pygame starwars.py
 ```
 
 ## Структура проекта
@@ -70,7 +73,7 @@ audio.py           — музыка, звуки событий и процеду
   make_screenshot.py — скриншот игры в .stems/screenshot.png
 sounds/            — фоновая музыка (*.mp3)
 sounds_event/      — win.mp3, fall.mp3, rebels.mp3
-assets/            — готовые PNG-спрайты персонажей
+assets/            — PNG-спрайты персонажей (stormtrooper.png — спрайт игрока)
 .stems/            — скриншоты для README
 ```
 

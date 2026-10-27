@@ -1,6 +1,11 @@
 """assets_gen.py — спрайты, лабиринт, цветовые схемы."""
-import pygame
+import os
 import random
+from functools import lru_cache
+
+import pygame
+
+from audio import resource_path
 
 TILE_SIZE = 40
 
@@ -67,7 +72,72 @@ def _surface(size=TILE_SIZE):
     return pygame.Surface((size, size), pygame.SRCALPHA)
 
 
+# ---------- PNG-ассеты персонажа ----------
+ASSETS_DIR      = "assets"
+STORM_FILE_NAME = "stormtrooper.png"
+STORM_MARGIN    = 2          # отступ картинки от края тайла (пиксели)
+
+
+@lru_cache(maxsize=1)
+def _load_stormtrooper_png():
+    """assets/stormtrooper.png, обрезанный и сглаженно вписанный в тайл.
+
+    Прозрачные поля исходника обрезаются (иначе персонаж выглядит мелким),
+    пропорции сохраняются. Картинка читается и масштабируется один раз
+    за запуск (кэш lru_cache).
+    Возвращает None, если PNG нет или он битый — тогда используется
+    процедурный спрайт _draw_stormtrooper().
+    """
+    path = resource_path(ASSETS_DIR, STORM_FILE_NAME)
+    if not os.path.isfile(path):
+        print(f"⚠️  Нет файла {path} — штурмовик рисуется кодом")
+        return None
+    try:
+        img = pygame.image.load(path)
+    except pygame.error as e:
+        print(f"⚠️  Не удалось прочитать {path}: {e}")
+        return None
+    try:
+        img = img.convert_alpha()
+    except pygame.error:
+        pass                     # видеорежим ещё не создан — это не критично
+
+    # Обрезаем прозрачные поля вокруг шлема
+    if img.get_flags() & pygame.SRCALPHA:
+        bounds = img.get_bounding_rect(min_alpha=8)
+        if bounds.width > 0 and bounds.height > 0:
+            img = img.subsurface(bounds).copy()
+
+    # Вписываем в тайл с сохранением пропорций
+    max_side = TILE_SIZE - STORM_MARGIN * 2
+    w, h = img.get_size()
+    scale = min(max_side / w, max_side / h)
+    size = (max(1, round(w * scale)), max(1, round(h * scale)))
+    return pygame.transform.smoothscale(img, size)
+
+
 def make_stormtrooper_sprite(frame=0):
+    """Кадр штурмовика из PNG-ассета с покачиванием при ходьбе."""
+    base = _load_stormtrooper_png()
+    if base is None:
+        return _draw_stormtrooper(frame)
+
+    s = _surface()
+    sway = [0, -1, 0, 1][frame % 4]      # вверх-вниз
+    lean = [1, 0, -1, 0][frame % 4]      # влево-вправо — «шаг»
+    x = (TILE_SIZE - base.get_width()) // 2 + lean
+    y = (TILE_SIZE - base.get_height()) // 2 + sway
+    s.blit(base, (x, y))
+    return s
+
+
+def make_stormtrooper_frames(count=4):
+    """Набор кадров ходьбы штурмовика для игрока."""
+    return [make_stormtrooper_sprite(i) for i in range(count)]
+
+
+def _draw_stormtrooper(frame=0):
+    """Процедурный штурмовик — фолбэк, если PNG-ассета нет."""
     s = _surface()
     sway = [0, -1, 0, 1][frame % 4]
     pygame.draw.ellipse(s, (235, 235, 245), (4, 3 + sway, 32, 34))

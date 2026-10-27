@@ -7,7 +7,7 @@ from collections import deque
 
 from assets_gen import (
     TILE_SIZE, THEMES, generate_maze,
-    make_stormtrooper_sprite, make_rebel_sprite, make_vader_sprite,
+    make_stormtrooper_frames, make_rebel_sprite, make_vader_sprite,
     make_friend_sprite, make_exit_sprite,
     make_wall_surface, make_floor_surface,
 )
@@ -90,7 +90,7 @@ class Game:
             self.use_freetype = False
 
         # Спрайты
-        self.storm_frames  = [make_stormtrooper_sprite(i) for i in range(4)]
+        self.storm_frames  = make_stormtrooper_frames(4)   # PNG assets/stormtrooper.png
         self.rebel_sprite  = make_rebel_sprite()
         self.vader_frames  = [make_vader_sprite(i) for i in range(8)]
         self.friend_sprite = make_friend_sprite()
