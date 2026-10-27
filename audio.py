@@ -1,18 +1,30 @@
 """audio.py — звук: фоновая музыка, win/fall, процедурные SFX."""
 import pygame
 import os
+import sys
 import math
 import random
 import struct
 
 SAMPLE_RATE      = 22050
 SOUNDS_DIR       = "sounds"           # фоновая музыка (loop, тихо)
-SOUNDS_EVENT_DIR = "sounds_event"     # события win/fall
+SOUNDS_EVENT_DIR = "sounds_event"     # события win/fall/rebels
 MUSIC_VOLUME     = 0.85
 WIN_FILE_NAME    = "win.mp3"
 FALL_FILE_NAME   = "fall.mp3"
-REBELS_FILE_NAME = "rebels.mp3" 
+REBELS_FILE_NAME = "rebels.mp3"
 AUDIO_EXTS       = (".mp3", ".ogg", ".wav", ".flac", ".opus")
+
+
+# ==================== RESOURCE PATH ====================
+def resource_path(*parts):
+    """Путь к ресурсу — работает и в .py, и в .exe (PyInstaller).
+    Принимает несколько частей пути: resource_path("sounds", "win.mp3")."""
+    if hasattr(sys, "_MEIPASS"):
+        base = sys._MEIPASS
+    else:
+        base = os.path.abspath(".")
+    return os.path.join(base, *parts)
 
 
 # ==================== WAV-ГЕНЕРАЦИЯ ====================
@@ -41,7 +53,7 @@ def _sound_from_samples(samples, sample_rate=SAMPLE_RATE):
 def gen_step_sound():
     n = int(SAMPLE_RATE * 0.05)
     return _sound_from_samples([random.uniform(-0.3, 0.3) *
-                                math.exp(-(i/SAMPLE_RATE) * 60)
+                                math.exp(-(i / SAMPLE_RATE) * 60)
                                 for i in range(n)])
 
 
@@ -154,7 +166,7 @@ def gen_ambient_loop(duration=12.0):
     return _sound_from_samples(out)
 
 
-# ==================== МЕНЕДЖЕР ====================
+# ==================== СПИСОК ФАЙЛОВ ====================
 def _list_audio_files(folder):
     if not os.path.isdir(folder):
         return []
@@ -162,6 +174,7 @@ def _list_audio_files(folder):
                   if f.lower().endswith(AUDIO_EXTS))
 
 
+# ==================== МЕНЕДЖЕР ====================
 class SoundManager:
     def __init__(self):
         self.enabled = pygame.mixer.get_init() is not None
@@ -209,9 +222,11 @@ class SoundManager:
 
         print("✅ Звуки готовы.")
 
+    # ---------- Загрузка файлов ----------
     def _load_event_sounds(self):
-        win_path  = os.path.join(SOUNDS_EVENT_DIR, WIN_FILE_NAME)
-        fall_path = os.path.join(SOUNDS_EVENT_DIR, FALL_FILE_NAME)
+        win_path    = resource_path(SOUNDS_EVENT_DIR, WIN_FILE_NAME)
+        fall_path   = resource_path(SOUNDS_EVENT_DIR, FALL_FILE_NAME)
+        rebels_path = resource_path(SOUNDS_EVENT_DIR, REBELS_FILE_NAME)
 
         if os.path.isfile(win_path):
             try:
@@ -223,7 +238,8 @@ class SoundManager:
         else:
             print(f"ℹ️  Нет {win_path} — процедурные фанфары.")
             self.event_win = gen_win_fanfare()
-            if self.event_win: self.event_win.set_volume(0.6)
+            if self.event_win:
+                self.event_win.set_volume(0.6)
 
         if os.path.isfile(fall_path):
             try:
@@ -235,11 +251,9 @@ class SoundManager:
         else:
             print(f"ℹ️  Нет {fall_path} — процедурный fall-стинг.")
             self.event_fall = gen_fall_sting()
-            if self.event_fall: self.event_fall.set_volume(0.6)
+            if self.event_fall:
+                self.event_fall.set_volume(0.6)
 
-        # rebels.mp3 — когда все повстанцы уничтожены
-        self.event_rebels = None
-        rebels_path = os.path.join(SOUNDS_EVENT_DIR, REBELS_FILE_NAME)
         if os.path.isfile(rebels_path):
             try:
                 self.event_rebels = pygame.mixer.Sound(rebels_path)
@@ -251,7 +265,7 @@ class SoundManager:
             print(f"ℹ️  Нет {rebels_path} — звук будет пропущен.")
 
     def _setup_background_music(self):
-        self.music_playlist = _list_audio_files(SOUNDS_DIR)
+        self.music_playlist = _list_audio_files(resource_path(SOUNDS_DIR))
         if self.music_playlist:
             print(f"🎶 Фоновая музыка: {len(self.music_playlist)} файл(ов)")
             for p in self.music_playlist:
@@ -260,6 +274,7 @@ class SoundManager:
             print(f"ℹ️  '{SOUNDS_DIR}/' пуста — процедурный эмбиент.")
             self.proc_ambient = gen_ambient_loop(12.0)
 
+    # ---------- Музыка ----------
     def _play_next_music(self):
         if not self.music_playlist or not self.music_channel:
             return
@@ -279,90 +294,12 @@ class SoundManager:
         if not self.music_channel.get_busy():
             self._play_next_music()
 
-    def play(self, name):
-        if not self.enabled:
-            return
-        snd = getattr(self, name, None)
-        if snd is not None:
-            try: snd.play()
-            except Exception: pass
-
     def stop_music(self):
-        if self.music_channel:
-            self.music_channel.stop()
-
-    def play_win(self):
-        self.stop_music()
-        if self.event_win:
-            try: self.event_win.play()
-            except Exception: pass
-
-    def play_fall(self):
-        """Проигрывает fall.mp3 СРАЗУ + меч/дыхание/смех параллельно."""
-        self.stop_music()
-
-        # fall.mp3 — сразу и гарантированно
-        if self.event_fall:
-            try:
-                self.event_fall.play()
-            except Exception:
-                pass
-
-        # Меч — сразу
-        if self.swing:
-            try:
-                self.swing.play()
-            except Exception:
-                pass
-
-        # Дыхание и смех — с задержкой через отдельный поток-таймер
-        # (pygame.time.set_timer здесь ненадёжен, поэтому используем
-        #  threading.Timer — он не зависит от главного цикла игры)
-        import threading
-        if self.breath:
-            threading.Timer(0.4, self._safe_play, args=(self.breath,)).start()
-        if self.laugh:
-            threading.Timer(0.9, self._safe_play, args=(self.laugh,)).start()
-
-    def play_rebels(self):
-        """Проигрывает rebels.mp3, если он загружен."""
-        if self.event_rebels:
-            try:
-                self.event_rebels.play()
-            except Exception:
-                pass
-
-    def _safe_play(self, snd):
-        try:
-            snd.play()
-        except Exception:
-            pass
-
-    def stop_all(self):
-        """Останавливает ВСЁ: музыку, win/fall, меч, смех."""
         if self.music_channel:
             try:
                 self.music_channel.stop()
             except Exception:
                 pass
-
-        # Отложенные таймеры больше не нужны — гасим на всякий случай
-        for evt in (pygame.USEREVENT + 1,
-                    pygame.USEREVENT + 2,
-                    pygame.USEREVENT + 3):
-            try:
-                pygame.time.set_timer(evt, 0)
-            except Exception:
-                pass
-
-        # Явно остановить все event/SFX-звуки
-        for snd in (self.event_win, self.event_fall, self.event_rebels,
-                    self.swing, self.breath, self.laugh):
-            if snd is not None:
-                try:
-                    snd.stop()
-                except Exception:
-                    pass
 
     def resume_music(self):
         if self.music_playlist:
@@ -372,3 +309,78 @@ class SoundManager:
             if not self.music_channel.get_busy():
                 self.music_channel.play(self.proc_ambient, loops=-1)
 
+    # ---------- SFX ----------
+    def play(self, name):
+        if not self.enabled:
+            return
+        snd = getattr(self, name, None)
+        if snd is not None:
+            try:
+                snd.play()
+            except Exception:
+                pass
+
+    def _safe_play(self, snd):
+        try:
+            snd.play()
+        except Exception:
+            pass
+
+    # ---------- События ----------
+    def play_win(self):
+        self.stop_music()
+        if self.event_win:
+            try:
+                self.event_win.play()
+            except Exception:
+                pass
+
+    def play_fall(self):
+        """fall.mp3 сразу + меч + дыхание/смех с задержкой."""
+        self.stop_music()
+
+        if self.event_fall:
+            try:
+                self.event_fall.play()
+            except Exception:
+                pass
+
+        if self.swing:
+            try:
+                self.swing.play()
+            except Exception:
+                pass
+
+        import threading
+        if self.breath:
+            threading.Timer(0.4, self._safe_play, args=(self.breath,)).start()
+        if self.laugh:
+            threading.Timer(0.9, self._safe_play, args=(self.laugh,)).start()
+
+    def play_rebels(self):
+        if self.event_rebels:
+            try:
+                self.event_rebels.play()
+            except Exception:
+                pass
+
+    # ---------- Стоп всего ----------
+    def stop_all(self):
+        """Останавливает ВСЁ: музыку, win/fall/rebels, меч, смех."""
+        self.stop_music()
+
+        for evt in (pygame.USEREVENT + 1,
+                    pygame.USEREVENT + 2,
+                    pygame.USEREVENT + 3):
+            try:
+                pygame.time.set_timer(evt, 0)
+            except Exception:
+                pass
+
+        for snd in (self.event_win, self.event_fall, self.event_rebels,
+                    self.swing, self.breath, self.laugh):
+            if snd is not None:
+                try:
+                    snd.stop()
+                except Exception:
+                    pass
