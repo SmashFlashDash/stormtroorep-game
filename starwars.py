@@ -364,6 +364,14 @@ class Game:
         if self.state != "playing":
             self._draw_game_over()
 
+    def _text_size(self, text, small=False):
+        """Ширина/высота текста в пикселях для ручной раскладки HUD."""
+        font = self.font_small if small else self.font
+        if self.use_freetype:
+            rect = font.get_rect(text)
+            return rect.width, rect.height
+        return font.size(text)
+
     def _draw_hud(self):
         y0 = self.rows * TILE_SIZE
         pygame.draw.rect(self.screen, (14, 14, 24),
@@ -372,23 +380,31 @@ class Game:
                          (0, y0), (SCREEN_WIDTH, y0), 2)
 
         hearts = "♥" * max(0, self.player.hp)
-        items = [
+        row1 = [
             (f"HP: {hearts}", (255, 255, 255)),
             (f"Счёт: {self.player.score}", (255, 220, 0)),
             (f"Друзья: {self.player.friends}", (100, 160, 235)),
             (f"Врагов: {len(self.rebels)}", (210, 90, 55)),
         ]
-        for i, (text, color) in enumerate(items):
-            self._text(text, color, (15 + i * 165, y0 + 12))
+        x = 15
+        for text, color in row1:
+            self._text(text, color, (x, y0 + 12))
+            x += self._text_size(text)[0] + 40
 
-        self._text(f"Карта: {self.theme['name']}", (200, 200, 220),
-                   (15, y0 + 38), small=True)
-        self._text(f"Рестартов: {self.restart_count}", (200, 200, 220),
-                   (200, y0 + 38), small=True)
-        self._text(f"Побед: {self.win_count}", (255, 180, 90),
-                   (350, y0 + 38), small=True)
-        self._text("Стрелки/WASD | R — рестарт | ESC — выход",
-                   (150, 150, 170), (SCREEN_WIDTH - 380, y0 + 12), small=True)
+        row2 = [
+            (f"Карта: {self.theme['name']}", (200, 200, 220)),
+            (f"Рестартов: {self.restart_count}", (200, 200, 220)),
+            (f"Побед: {self.win_count}", (255, 180, 90)),
+        ]
+        x = 15
+        for text, color in row2:
+            self._text(text, color, (x, y0 + 38), small=True)
+            x += self._text_size(text, small=True)[0] + 25
+
+        hint = "Стрелки/WASD | R — рестарт | ESC — выход"
+        hint_w, _ = self._text_size(hint, small=True)
+        self._text(hint, (150, 150, 170),
+                   (SCREEN_WIDTH - hint_w - 15, y0 + 38), small=True)
 
     def _draw_game_over(self):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
